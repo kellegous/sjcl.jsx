@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+
+var child_process = require('child_process')
+  path = require('path'),
+  fs = require('fs');
+
+var jsx = path.join(__dirname, '../out/src/github.com/kellegous/pork/deps/jsx/bin/jsx');
+var out = path.join(__dirname, 'out');
+
+// make sure we have a build directory.
+if (!fs.existsSync(out))
+  fs.mkdirSync(out);
+
+// build the test
+child_process.execFile(jsx, ['crypto_test.jsx'], {
+    cwd : __dirname,
+    stdio : [null, 'pipe', process.stderr]
+  }, function(err, stdout, stderr) {
+    // tell it to stream to this stderr, it just ignores you.
+    if (err != null) {
+      process.stderr.write(stderr);
+      process.exit(err.code);
+    }
+
+    var jso = path.join(out, 'test.js');
+    fs.writeFileSync(jso,
+      'var assert = require("assert");\n' + stdout
+      + 'JSX.require("crypto_test.jsx")._Main.main$AS([]);\n');
+
+    child_process.spawn(process.execPath,[jso]);
+    var p = child_process.spawn(process.execPath, [jso], {
+      stdio : [process.stdin, process.stdout, process.stderr]});
+    p.on('exit', function(code) {
+      process.exit(code);
+    });
+  });
+  
