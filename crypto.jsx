@@ -1,63 +1,29 @@
 import "js.jsx";
 
 class Crypto {
-  static function hex(bits : number[]) : string {
+  static var _BASE64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  static function sha256(data : string) : number[] {
+    return new Sha256().update(data).finalize();
+  }
+
+  static function toHex(bits : number[]) : string {
     var out = '';
     for (var i = 0, n = bits.length; i < n; ++i)
       out += ((bits[i] | 0) + 0xF00000000000).toString(16).substring(4);
-    return out.substring(0, _BitArray.bitLength(bits) / 4);
-  }
-}
-
-class Codec {
-  static function utf8ToBits(str : string) : number[] {
-    return _BitArray._utf8ToBits(str);
-  }
-}
-
-class Base64 {
-  static function fromBits(arr : number[]) : string {
-    return _BitArray._base64FromBits(arr, false);
-  }
-}
-
-class _BitArray {
-
-  static var _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-  static function _escapeString(str : string) : string {
-    var unescape = js.global['unescape'] as function(:string) : string;
-    var encodeURIComponent = js.global['encodeURIComponent'] as function(:string) : string;
-    return unescape(encodeURIComponent(str));
+    return out.substring(0, Crypto._bitLength(bits) / 4);    
   }
 
-  // Convert from a UTF-8 string to a bit array.
-  static function _utf8ToBits(str : string) : number[] {
-    str = _BitArray._escapeString(str);
-    var out = [] : number[];
-    var tmp = 0;
-    var i : number;
-
-    for (i = 0; i < str.length; i++) {
-      tmp = tmp << 8 | str.charCodeAt(i);
-      if ((i & 3) == 3) {
-        out.push(tmp);
-        tmp = 0;
-      }
-    }
-
-    if ((i & 3) != 0)
-      out.push(_BitArray.partial(8 * (i & 3), tmp));
-
-    return out;
+  static function toBase64(arr : number[]) : string {
+    return Crypto.toBase64(arr, false);
   }
 
-  static function _base64FromBits(arr : number[], urlSafe : boolean) : string {
+  static function toBase64(arr : number[], urlSafe : boolean) : string {
     var out = "";
-    var c = _BitArray._chars;
+    var c = Crypto._BASE64CHARS;
     var bits = 0;
     var ta = 0;
-    var bl = _BitArray.bitLength(arr);
+    var bl = Crypto._bitLength(arr);
 
     if (urlSafe)
       c = c.substring(0, 62) + '-_';
@@ -81,21 +47,49 @@ class _BitArray {
     return out;
   }
 
-  static function bitSlice(a : number[], bstart : number) : number[] {
-    return _BitArray._shiftRight(
+  static function fromUtf8(str : string) : number[] {
+    str = Crypto._escapeString(str);
+    var out = [] : number[];
+    var tmp = 0;
+    var i : number;
+
+    for (i = 0; i < str.length; i++) {
+      tmp = tmp << 8 | str.charCodeAt(i);
+      if ((i & 3) == 3) {
+        out.push(tmp);
+        tmp = 0;
+      }
+    }
+
+    if ((i & 3) != 0)
+      out.push(Crypto._partial(8 * (i & 3), tmp));
+
+    return out;
+  }
+
+  static function _escapeString(str : string) : string {
+    var unescape = js.global['unescape'] as function(:string) : string;
+    var encodeURIComponent = js.global['encodeURIComponent'] as function(:string) : string;
+    return unescape(encodeURIComponent(str));
+  }
+
+
+  // Bit array operations
+  static function _bitSlice(a : number[], bstart : number) : number[] {
+    return Crypto._shiftRight(
       a.slice(bstart/32),
       32 - (bstart & 31)).slice(1);
   }
 
-  static function bitSlice(a : number[], bstart : number, bend : number) : number[] {
-    a = _BitArray._shiftRight(
+  static function _bitSlice(a : number[], bstart : number, bend : number) : number[] {
+    a = Crypto._shiftRight(
       a.slice(bstart/32),
       32 - (bstart & 31)).slice(1);
-    return _BitArray.clamp(a, bend - bstart);
+    return Crypto._clamp(a, bend - bstart);
   }
 
   // Extract a number packed into a bit array.
-  static function extract(a : number[], bstart : number, blength : number) : number {
+  static function _extract(a : number[], bstart : number, blength : number) : number {
     var x = 0;
     var sh = Math.floor((-bstart-blength) & 31);
     if ((bstart + blength - 1 ^ bstart) & -32) {
@@ -109,62 +103,62 @@ class _BitArray {
   }
 
   // Concats two bit arrays.
-  static function concat(a : number[], b : number[]) : number[] {
+  static function _concat(a : number[], b : number[]) : number[] {
     if (a.length == 0 || b.length == 0)
       return a.concat(b);
 
     var last = a[a.length - 1];
-    var shift = _BitArray.getPartial(last);
+    var shift = Crypto._getPartial(last);
     if (shift == 32) {
       return a.concat(b);
     } else {
-      return _BitArray._shiftRight(b, shift, last | 0, a.slice(0, a.length - 1));
+      return Crypto._shiftRight(b, shift, last | 0, a.slice(0, a.length - 1));
     }
   }
 
   // Find the length of an array of bits.
-  static function bitLength(a : number[]) : number {
+  static function _bitLength(a : number[]) : number {
     var l = a.length;
     if (l == 0)
       return 0;
 
     var x = a[l - 1];
-    return (l - 1) * 32 + _BitArray.getPartial(x);
+    return (l - 1) * 32 + Crypto._getPartial(x);
   }
 
   // Truncate an array.
-  static function clamp(a : number[], len : number) : number[] {
+  static function _clamp(a : number[], len : number) : number[] {
     if (a.length * 32 < len)
       return a;
     a = a.slice(0, Math.ceil(len / 32));
     var l = a.length;
     len = len & 31;
     if (l > 0 && len != 0)
-      a[l - 1] = _BitArray.partial(len, a[l - 1] & 0x80000000 >> (len - 1), 1);
+      a[l - 1] = Crypto._partial(len, a[l - 1] & 0x80000000 >> (len - 1), 1);
     return a;
   }
 
-  static function partial(len : number, x : number) : number {
-    return _BitArray.partial(len, x, 0);
+  static function _partial(len : number, x : number) : number {
+    return Crypto._partial(len, x, 0);
   }
 
   // Make a partial word for a bit array.
-  static function partial(len : number, x : number, end : number) : number {
+  static function _partial(len : number, x : number, end : number) : number {
     if (len == 32)
       return x;
     return (end == 1 ? x|0 : x << (32 - len)) + len * 0x10000000000;
   }
 
-  static function getPartial(x : number) : number {
+  static function _getPartial(x : number) : number {
     var y = Math.round(x/0x10000000000);
     return y != 0 ? y : 32;
   }
 
   static function _shiftRight(a : number[], shift : number) : number[] {
-    return _BitArray._shiftRight(a, shift, 0, [] : number[]);
+    return Crypto._shiftRight(a, shift, 0, [] : number[]);
   }
   static function _shiftRight(a : number[], shift : number, carry : number) : number[] {
-    return _BitArray._shiftRight(a, shift, carry, [] : number[]);
+    return Crypto._shiftRight(a, shift, carry, [] : number[]);
   }
 
   static function _shiftRight(a : number[], shift : number, carry : number, out : number[]) : number[] {
@@ -182,13 +176,14 @@ class _BitArray {
     }
 
     var last2 = a.length > 0 ? a[a.length - 1] as number : 0;
-    var shift2 = _BitArray.getPartial(last2);
-    out.push(_BitArray.partial(
+    var shift2 = Crypto._getPartial(last2);
+    out.push(Crypto._partial(
       shift + shift2 & 31,
       (shift + shift2 > 32) ? carry : out.pop() as number,
       1));
     return out;
   }  
+
 }
 
 class Sha256 {
@@ -220,14 +215,14 @@ class Sha256 {
   }
 
   function update(data : string) : Sha256 {
-    return this.update(_BitArray._utf8ToBits(data));
+    return this.update(Crypto.fromUtf8(data));
   }
 
   function update(data : number[]) : Sha256 {
     var i;
-    var b = this._b = _BitArray.concat(this._b, data);
+    var b = this._b = Crypto._concat(this._b, data);
     var on = this._n;
-    var nn = this._n = on + _BitArray.bitLength(data);
+    var nn = this._n = on + Crypto._bitLength(data);
     for (i = 512 + on & -512; i <= nn; i += 512)
       this._block(b.splice(0, 16));
     return this;
@@ -238,7 +233,7 @@ class Sha256 {
     var h = this._h;
 
     // Round out and push the buffer
-    b = _BitArray.concat(b, [_BitArray.partial(1, 1)]);
+    b = Crypto._concat(b, [Crypto._partial(1, 1)]);
 
     // Round out the buffer to a multiple of 16 words
     for (var i = b.length + 2; (i & 15) != 0; i++)

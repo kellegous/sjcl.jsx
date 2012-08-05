@@ -10,12 +10,9 @@ native class check {
 class _Main {
   static function main(args : string[]) : void {
     Sha256TestData.VECTORS.forEach((v) -> {
-      var a = Crypto.hex(new Sha256.update(v[0]).finalize());
-      log v[0];
-      log a;
-      log v[1];
-      log '';
+      var a = Crypto.toHex(Crypto.sha256(v[0]));
       check.ok(a == v[1]);
     });
+    log 'Holy Crap! All Tests Passed!';
   }
 }
