@@ -1,6 +1,30 @@
 import "js.jsx";
 
+class Crypto {
+  static function hex(bits : number[]) : string {
+    var out = '';
+    for (var i = 0, n = bits.length; i < n; ++i)
+      out += ((bits[i] | 0) + 0xF00000000000).toString(16).substring(4);
+    return out.substring(0, _BitArray.bitLength(bits) / 4);
+  }
+}
+
+class Codec {
+  static function utf8ToBits(str : string) : number[] {
+    return _BitArray._utf8ToBits(str);
+  }
+}
+
+class Base64 {
+  static function fromBits(arr : number[]) : string {
+    return _BitArray._base64FromBits(arr, false);
+  }
+}
+
 class _BitArray {
+
+  static var _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
   static function _escapeString(str : string) : string {
     var unescape = js.global['unescape'] as function(:string) : string;
     var encodeURIComponent = js.global['encodeURIComponent'] as function(:string) : string;
@@ -10,7 +34,6 @@ class _BitArray {
   // Convert from a UTF-8 string to a bit array.
   static function _utf8ToBits(str : string) : number[] {
     str = _BitArray._escapeString(str);
-    log str;
     var out = [] : number[];
     var tmp = 0;
     var i : number;
@@ -26,6 +49,35 @@ class _BitArray {
     if ((i & 3) != 0)
       out.push(_BitArray.partial(8 * (i & 3), tmp));
 
+    return out;
+  }
+
+  static function _base64FromBits(arr : number[], urlSafe : boolean) : string {
+    var out = "";
+    var c = _BitArray._chars;
+    var bits = 0;
+    var ta = 0;
+    var bl = _BitArray.bitLength(arr);
+
+    if (urlSafe)
+      c = c.substring(0, 62) + '-_';
+
+    var i = 0;
+    while (out.length * 6 < bl) {
+      var v = i == arr.length ? 0 : arr[i] as number;
+      out += c.charAt((ta ^ v >>> bits) >>> 26);
+      if (bits < 6) {
+        ta = v << (6 - bits);
+        bits += 26;
+        i++;
+      } else {
+        ta <<= 6;
+        bits -= 6;
+      }
+    }
+
+    while ((out.length & 3) != 0)
+      out += '=';
     return out;
   }
 
@@ -62,11 +114,11 @@ class _BitArray {
       return a.concat(b);
 
     var last = a[a.length - 1];
-    var shift = _BitArray.getPartial(a[last]);
+    var shift = _BitArray.getPartial(last);
     if (shift == 32) {
       return a.concat(b);
     } else {
-      return _BitArray._shiftRight(a, shift, last|0, a.slice(0, b.length - 1));
+      return _BitArray._shiftRight(b, shift, last | 0, a.slice(0, a.length - 1));
     }
   }
 
@@ -139,95 +191,112 @@ class _BitArray {
   }  
 }
 
-class Sha1 {
+class Sha256 {
+  static var _init =
+    [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19] : number[];
+  static var _key =
+    [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2] : number[];
 
   var _h : number[];
-  var _buffer : number[];
-  var _length : number;
-  var blockSize = 512;
-
-   // The SHA-1 initialization vector.
-  static var _init = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0] : number[];
-
-  // The SHA-1 hash key.
-  static var _key = [0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6] : number[];
+  var _b : number[];
+  var _n : number;
 
   function constructor() {
     this.reset();
   }
 
-  function reset() : Sha1 {
-    this._h = Sha1._init.slice(0);
-    this._buffer = [] : number[];
-    this._length = 0;
+  function reset() : Sha256 {
+    this._h = Sha256._init.slice(0);
+    this._b = [] : number[];
+    this._n = 0;
     return this;
   }
 
-  function update(data : number[]) : Sha1 {
-    var b = this._buffer = _BitArray.concat(this._buffer, data);
-    var ol = this._length;
-    var nl = this._length = ol + _BitArray.bitLength(data);
-    for (var i = this.blockSize + ol & -this.blockSize; i <= nl; i+= this.blockSize)
+  function update(data : string) : Sha256 {
+    return this.update(_BitArray._utf8ToBits(data));
+  }
+
+  function update(data : number[]) : Sha256 {
+    var i;
+    var b = this._b = _BitArray.concat(this._b, data);
+    var on = this._n;
+    var nn = this._n = on + _BitArray.bitLength(data);
+    for (i = 512 + on & -512; i <= nn; i += 512)
       this._block(b.splice(0, 16));
     return this;
   }
 
-  function update(data : string) : Sha1 {
-    return this.update(_BitArray._utf8ToBits(data));
-  }
-
   function finalize() : number[] {
-    return null;
+    var b = this._b;
+    var h = this._h;
+
+    // Round out and push the buffer
+    b = _BitArray.concat(b, [_BitArray.partial(1, 1)]);
+
+    // Round out the buffer to a multiple of 16 words
+    for (var i = b.length + 2; (i & 15) != 0; i++)
+      b.push(0);
+
+    // append the length
+    b.push(Math.floor(this._n / 0x100000000));
+    b.push(this._n | 0);
+
+    while (b.length != 0)
+      this._block(b.splice(0, 16));
+
+    this.reset();
+    return h;
   }
 
   function _block(words : number[]) : void {
     var w = words.slice(0);
     var h = this._h;
-    var k = Sha1._key;
+    var k = Sha256._key;
+    var h0 = h[0];
+    var h1 = h[1];
+    var h2 = h[2];
+    var h3 = h[3];
+    var h4 = h[4];
+    var h5 = h[5];
+    var h6 = h[6];
+    var h7 = h[7];
 
-    var a = h[0];
-    var b = h[1];
-    var c = h[2];
-    var d = h[3];
-    var e = h[4];
-
-    for (var t = 0; t <= 79; t++) {
-      if (t >= 16) {
-        w[t] = Sha1._S(1, w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16]);
+    var tmp = 0, a = 0, b = 0;
+    for (var i = 0; i < 64; ++i) {
+      if (i<16) {
+        tmp = w[i];
+      } else {
+        a   = w[(i+1 ) & 15];
+        b   = w[(i+14) & 15];
+        tmp = w[i&15] = ((a>>>7  ^ a>>>18 ^ a>>>3  ^ a<<25 ^ a<<14) + 
+                         (b>>>17 ^ b>>>19 ^ b>>>10 ^ b<<15 ^ b<<13) +
+                         w[i&15] + w[(i+9) & 15]) | 0;
       }
-      var tmp = (Sha1._S(5, a) + Sha1._f(t, b, c, d) + e + w[t] +
-        Sha1._key[Math.floor(t / 20)]) | 0;
-      e = d;
-      d = c;
-      c = Sha1._S(30, b);
-      b = a;
-      a = tmp;
+      
+      tmp = (tmp + h7 + (h4>>>6 ^ h4>>>11 ^ h4>>>25 ^ h4<<26 ^ h4<<21 ^ h4<<7) +  (h6 ^ h4&(h5^h6)) + k[i]); // | 0;
+      
+      // shift register
+      h7 = h6; h6 = h5; h5 = h4;
+      h4 = h3 + tmp | 0;
+      h3 = h2; h2 = h1; h1 = h0;
+
+      h0 = (tmp +  ((h1&h2) ^ (h3&(h1^h2))) + (h1>>>2 ^ h1>>>13 ^ h1>>>22 ^ h1<<30 ^ h1<<19 ^ h1<<10)) | 0;
     }
 
-    h[0] = (h[0] + a) | 0;
-    h[1] = (h[1] + b) | 0;
-    h[2] = (h[2] + c) | 0;
-    h[3] = (h[3] + d) | 0;
-    h[4] = (h[4] + e) | 0;
-  }
-
-  // Circular left-shift operator
-  static function _S(n : number, x : number) : number {
-    return (x << n) | (x >>> 32 - n);
-  }
-
-  // The SHA-1 logical functions f(0), f(1), ..., f(79).
-  static function _f(t : number, b : number, c : number, d : number) : number {
-    if (t <= 19)
-      return (b & c) | (~b & d);
-    else if (t <= 39)
-      return b ^ c ^ d;
-    else if (t <= 59)
-      return (b & c) | (b & d) | (c & d);
-    else if (t <= 79)
-      return b ^ c ^ d;
-
-    assert false;
-    return 0;
+    h[0] = h[0] + h0 | 0;
+    h[1] = h[1] + h1 | 0;
+    h[2] = h[2] + h2 | 0;
+    h[3] = h[3] + h3 | 0;
+    h[4] = h[4] + h4 | 0;
+    h[5] = h[5] + h5 | 0;
+    h[6] = h[6] + h6 | 0;
+    h[7] = h[7] + h7 | 0;
   }
 }

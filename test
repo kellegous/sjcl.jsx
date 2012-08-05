@@ -24,7 +24,7 @@ child_process.execFile(jsx, ['crypto_test.jsx'], {
 
     var jso = path.join(out, 'test.js');
     fs.writeFileSync(jso,
-      'var assert = require("assert");\n' + stdout
+      'var check = require("assert");\n' + stdout
       + 'JSX.require("crypto_test.jsx")._Main.main$AS([]);\n');
 
     child_process.spawn(process.execPath,[jso]);
