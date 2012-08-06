@@ -4,7 +4,7 @@ var child_process = require('child_process')
   path = require('path'),
   fs = require('fs');
 
-var jsx = path.join(__dirname, '../out/src/github.com/kellegous/pork/deps/jsx/bin/jsx');
+var jsx = path.join(__dirname, 'JSX/bin/jsx');
 var out = path.join(__dirname, 'out');
 
 // make sure we have a build directory.
@@ -27,7 +27,6 @@ child_process.execFile(jsx, ['crypto_test.jsx'], {
       'var check = require("assert");\n' + stdout
       + 'JSX.require("crypto_test.jsx")._Main.main$AS([]);\n');
 
-    child_process.spawn(process.execPath,[jso]);
     var p = child_process.spawn(process.execPath, [jso], {
       stdio : [process.stdin, process.stdout, process.stderr]});
     p.on('exit', function(code) {
