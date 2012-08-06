@@ -6,31 +6,51 @@ var child_process = require('child_process')
 
 var jsx = path.join(__dirname, 'JSX/bin/jsx');
 var out = path.join(__dirname, 'out');
+var jsx_url = 'https://github.com/jsx/JSX.git';
+
+var CloneJsx = function(fn) {
+  if (fs.existsSync(path.join(__dirname, 'JSX'))) {
+    fn();
+    return;
+  }
+
+  var p = child_process.spawn('git', ['clone', jsx_url], {
+    stdio : [process.stdin, process.stdout, process.stderr],
+    cwd : __dirname
+  });
+  p.on('exit', function(code) {
+    if (code != 0)
+      process.exit(code);
+    fn();
+  });
+};
 
 // make sure we have a build directory.
 if (!fs.existsSync(out))
   fs.mkdirSync(out);
 
-// build the test
-child_process.execFile(jsx, ['crypto_test.jsx'], {
-    cwd : __dirname,
-    stdio : [null, 'pipe', process.stderr]
-  }, function(err, stdout, stderr) {
-    // tell it to stream to this stderr, it just ignores you.
-    if (err != null) {
-      process.stderr.write(stderr);
-      process.exit(err.code);
-    }
+CloneJsx(function() {
+  // build the test
+  child_process.execFile(jsx, ['crypto_test.jsx'], {
+      cwd : __dirname,
+      stdio : [null, 'pipe', process.stderr]
+    }, function(err, stdout, stderr) {
+      // tell it to stream to this stderr, it just ignores you.
+      if (err != null) {
+        process.stderr.write(stderr);
+        process.exit(err.code);
+      }
 
-    var jso = path.join(out, 'test.js');
-    fs.writeFileSync(jso,
-      'var check = require("assert");\n' + stdout
-      + 'JSX.require("crypto_test.jsx")._Main.main$AS([]);\n');
+      var jso = path.join(out, 'test.js');
+      fs.writeFileSync(jso,
+        'var check = require("assert");\n' + stdout
+        + 'JSX.require("crypto_test.jsx")._Main.main$AS([]);\n');
 
-    var p = child_process.spawn(process.execPath, [jso], {
-      stdio : [process.stdin, process.stdout, process.stderr]});
-    p.on('exit', function(code) {
-      process.exit(code);
+      var p = child_process.spawn(process.execPath, [jso], {
+        stdio : [process.stdin, process.stdout, process.stderr]});
+      p.on('exit', function(code) {
+        process.exit(code);
+      });
     });
-  });
+});
   
