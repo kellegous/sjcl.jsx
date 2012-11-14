@@ -15,10 +15,14 @@ class Crypto {
   }
 
   static function toBase64(arr : number[]) : string {
-    return Crypto.toBase64(arr, false);
+    return Crypto.toBase64(arr, false, true);
   }
 
   static function toBase64(arr : number[], urlSafe : boolean) : string {
+    return Crypto.toBase64(arr, urlSafe, true);
+  }
+
+  static function toBase64(arr : number[], urlSafe : boolean, padded : boolean) : string {
     var out = "";
     var c = Crypto._BASE64CHARS;
     var bits = 0;
@@ -42,8 +46,11 @@ class Crypto {
       }
     }
 
-    while ((out.length & 3) != 0)
-      out += '=';
+    if (padded) {
+      while ((out.length & 3) != 0)
+        out += '=';
+    }
+
     return out;
   }
 
